@@ -4,6 +4,7 @@ import sys
 import glob
 import time
 import logging
+import shutil
 from watchdog.observers import Observer
 from watchdog.events import LoggingEventHandler
 from watchdog.events import FileSystemEventHandler
@@ -12,14 +13,26 @@ cat = lambda f : [print(l, end='') for l in open(f)]
 rm = lambda path : [os.remove(f) for f in glob.glob(path)]
 TMP = os.environ['TMP']
 
+def file_move(src, dst):
+	# we need to use os.replace to actually replace the dll, because it might create weird 
+	# stalling scenearious where rose is reading the dll before it is written.
+	# os.replace is atomic. https://docs.python.org/3/library/os.html#os.replace
+	try:
+		os.replace(src, dst)
+	except (IOError, OSError) as error:
+		shutil.move(src, dst + ".rose_tmp")
+		os.replace(dst + ".rose_tmp", dst)
+	pass
+
 def execute(cmd):
 	print("EXECUTING:", cmd)
 	return os.system(cmd)
 
-def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_folder="."):
+def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_file="."):
 	code = 0
 	rand = random.randint(1, 9999999)
 	PDB_NAME='%s/ROSE_SYMBOLS_%d.pdb' % (TMP, rand)
+	APP_NAME='%s/ROSE_SYMBOLS_%d.%s' % (TMP, rand, target)
 
 
 	arg_c_files = " ".join(["./" + D for D in cfiles])
@@ -28,15 +41,14 @@ def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_f
 	CPP_FILE=C_FILES[-1]
 
 	INCLUDES=" ".join(["/I " + I for I in includes])
-	#' /I ../../externals/include/imgui '
 
 	# Faster builds: https://devblogs.microsoft.com/cppblog/recommendations-to-speed-c-builds-in-visual-studio/
 	print(f'compiling {CPP_FILE}')
-	#CL /nologo /MP /O1 /std:c++17 /wd"4530" /LD /MD /I third_party/maths /I ../../include /Fe%output_folder% %CPP_FILE% source\roseimpl.cpp
+	#CL /nologo /MP /O1 /std:c++17 /wd"4530" /LD /MD /I third_party/maths /I R:/rose/include /Fe%output_file% %CPP_FILE% source\roseimpl.cpp
 	#TODO: check target == exe or dll
-	#error = os.system(f'CL /nologo /MP /std:c++17 /wd"4530" /Zi /LD /MD {INCLUDES} /Fe{output_folder} {CPP_FILE} source/roseimpl.cpp ../../.build/bin/DebugFast/raylib.lib /link /incremental /PDB:"{PDB_NAME}" > %TMP%/clout.txt')
+	#error = os.system(f'CL /nologo /MP /std:c++17 /wd"4530" /Zi /LD /MD {INCLUDES} /Fe{output_file} {CPP_FILE} source/roseimpl.cpp R:/rose/.build/bin/DebugFast/raylib.lib /link /incremental /PDB:"{PDB_NAME}" > %TMP%/clout.txt')
 	dll_stuff = "/LD /MD"
-	error = execute(f'{compiler} /nologo /MP /std:c++17 /wd"4530" {arg_defines} /Zi {dll_stuff} {INCLUDES} /Fe:"{output_folder}" {arg_c_files} ../../rose/.build/bin/Release/raylib.lib ../../rose/.build/bin/Release/imgui.lib /link /incremental /PDB:"{PDB_NAME}" > {TMP}/clout.txt')
+	error = execute(f'{compiler} /nologo /MP /std:c++17 /wd"4530" {arg_defines} /Zi {dll_stuff} {INCLUDES} /Fe:"{APP_NAME}" {arg_c_files} R:/rose/.build/bin/Release/raylib.lib R:/rose/.build/bin/Release/imgui.lib /link /incremental /PDB:"{PDB_NAME}" > {TMP}/clout.txt')
 
 	if error:
 		code = 1
@@ -46,17 +58,8 @@ def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_f
 		cat(TMP + "/clout.txt")
 		print("")
 	else:
+		file_move(APP_NAME,output_file)
 		print(f"							 ~~ OK ~~")
-
-	rm('*.obj')
-	rm('*.idb')
-	rm('*.pdb')
-	rm('*.ilk')
-	rm('*.lib')
-	rm('*.exp')
-	rm(output_folder + '/*.lib')
-	rm(output_folder + '/*.exp')
-	rm(output_folder + '/*.ilk')
 
 	return code
 
@@ -84,7 +87,7 @@ DEFINES = [
 	"IMGUI_API=__declspec(dllimport)"
 ]
 
-output_folder = "."
+output_file = "."
 
 #remove any non alpha numeric characters from string
 def remove_non_alpha(string):
@@ -106,18 +109,18 @@ class MyClass(FileSystemEventHandler):
 		if remove_non_alpha(event.src_path) in (remove_non_alpha(f) for f in self.files):
 			#print the file name
 			print("recompile", event.src_path)
-			compile("CL", includes=INCLUDE_ARRAY, defines=DEFINES, target="dll", cfiles=C_FILES, output_folder=output_folder)
+			compile("CL", includes=INCLUDE_ARRAY, defines=DEFINES, target="dll", cfiles=C_FILES, output_file=output_file)
 
 if __name__ == "__main__":
 	watch = False
 
 	for i in range(1, len(sys.argv)):
 		arg = sys.argv[i]
-		output_folder = arg
+		output_file = arg
 		if arg == "--watch" or arg == "-W":
 			watch = True
 
-	compile("CL", includes=INCLUDE_ARRAY, defines=DEFINES, target="dll", cfiles=C_FILES, output_folder=output_folder)
+	compile("CL", includes=INCLUDE_ARRAY, defines=DEFINES, target="dll", cfiles=C_FILES, output_file=output_file)
 
 	if watch:
 		logging.basicConfig(level=logging.INFO,
