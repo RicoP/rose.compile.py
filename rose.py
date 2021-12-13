@@ -5,6 +5,17 @@ import glob
 import time
 import logging
 import shutil
+import hashlib
+ 
+def hash_string(input):
+    byte_input = input.encode()
+    hash_object = hashlib.sha256(byte_input)
+    return hash_object
+ 
+def update_hash(hash_object, input_str):
+    # Adds the string to the hash string
+    hash_object.update(input_str.encode())
+
 from watchdog.observers import Observer
 from watchdog.events import LoggingEventHandler
 from watchdog.events import FileSystemEventHandler
@@ -14,8 +25,8 @@ rm = lambda path : [os.remove(f) for f in glob.glob(path)]
 TMP = os.environ['TMP']
 
 def file_move(src, dst):
-	# we need to use os.replace to actually replace the dll, because it might create weird 
-	# stalling scenearious where rose is reading the dll before it is written.
+	# we need to use os.replace to avoid weird stalling scenearious
+	# where rose is reading the dll before it is written.
 	# os.replace is atomic. https://docs.python.org/3/library/os.html#os.replace
 	try:
 		os.replace(src, dst)
@@ -29,11 +40,18 @@ def execute(cmd):
 	return os.system(cmd)
 
 def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_file="."):
-	code = 0
-	rand = random.randint(1, 9999999)
-	PDB_NAME='%s/ROSE_SYMBOLS_%d.pdb' % (TMP, rand)
-	APP_NAME='%s/ROSE_SYMBOLS_%d.%s' % (TMP, rand, target)
+	#Target name based on input hashes
+	#https://www.askpython.com/python-modules/python-hashlib-module
+	hash_object = hash_string(compiler)
+	[update_hash(hash_object, s) for s in [output_file, target]]
+	[update_hash(hash_object, s) for s in includes]
+	[update_hash(hash_object, s) for s in defines]
+	[update_hash(hash_object, s) for s in cfiles]
 
+	rand = hash_object.hexdigest()
+
+	PDB_NAME=f'{TMP}/ROSE_{rand}.pdb'
+	APP_NAME=f'{TMP}/ROSE_{rand}.{target}'
 
 	arg_c_files = " ".join(["./" + D for D in cfiles])
 	arg_defines = " ".join(["/D" + D for D in defines])
@@ -51,7 +69,6 @@ def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_f
 	error = execute(f'{compiler} /nologo /MP /std:c++17 /wd"4530" {arg_defines} /Zi {dll_stuff} {INCLUDES} /Fe:"{APP_NAME}" {arg_c_files} R:/rose/.build/bin/Release/raylib.lib R:/rose/.build/bin/Release/imgui.lib /link /incremental /PDB:"{PDB_NAME}" > {TMP}/clout.txt')
 
 	if error:
-		code = 1
 		print("~~~~~~~~~~~")
 		print("~~ ERROR ~~")
 		print("~~~~~~~~~~~")
@@ -61,7 +78,7 @@ def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_f
 		file_move(APP_NAME,output_file)
 		print(f"							 ~~ OK ~~")
 
-	return code
+	return error
 
 
 INCLUDE_ARRAY = [
