@@ -40,6 +40,7 @@ def execute(cmd):
 	return os.system(cmd)
 
 def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_file="."):
+	print("compile")
 	#Target name based on input hashes
 	#https://www.askpython.com/python-modules/python-hashlib-module
 	hash_object = hash_string(compiler)
@@ -50,9 +51,7 @@ def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_f
 
 	rand = hash_object.hexdigest()
 
-	random_number =  random.randint(0, 1000000)
-
-	PDB_NAME=f'{TMP}/ROSE_{random_number}.pdb'
+	PDB_NAME=f'{TMP}/ROSE_{ random.randint(1, 99999999999) }.pdb'
 	APP_NAME=f'{TMP}/ROSE_{rand}.{target}'
 
 	arg_c_files = " ".join(["./" + D for D in cfiles])
