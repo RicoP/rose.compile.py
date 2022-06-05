@@ -50,7 +50,9 @@ def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_f
 
 	rand = hash_object.hexdigest()
 
-	PDB_NAME=f'{TMP}/ROSE_{rand}.pdb'
+	random_number =  random.randint(0, 1000000)
+
+	PDB_NAME=f'{TMP}/ROSE_{random_number}.pdb'
 	APP_NAME=f'{TMP}/ROSE_{rand}.{target}'
 
 	arg_c_files = " ".join(["./" + D for D in cfiles])
@@ -60,13 +62,16 @@ def compile(compiler, cfiles, defines=[], target="exe", includes=["."], output_f
 
 	INCLUDES=" ".join(["/I " + I for I in includes])
 
+	#libs = "R:/rose/.build/bin/Release/raylib.lib R:/rose/.build/bin/Release/imgui.lib"
+	libs = "A:/rose_repo/rose/.build/bin/Release/raylib.lib A:/rose_repo/rose/.build/bin/Release/imgui.lib"
+
 	# Faster builds: https://devblogs.microsoft.com/cppblog/recommendations-to-speed-c-builds-in-visual-studio/
 	print(f'compiling {CPP_FILE}')
 	#CL /nologo /MP /O1 /std:c++17 /wd"4530" /LD /MD /I third_party/maths /I R:/rose/include /Fe%output_file% %CPP_FILE% source\roseimpl.cpp
 	#TODO: check target == exe or dll
 	#error = os.system(f'CL /nologo /MP /std:c++17 /wd"4530" /Zi /LD /MD {INCLUDES} /Fe{output_file} {CPP_FILE} source/roseimpl.cpp R:/rose/.build/bin/DebugFast/raylib.lib /link /incremental /PDB:"{PDB_NAME}" > %TMP%/clout.txt')
 	dll_stuff = "/LD /MD"
-	error = execute(f'{compiler} /nologo /MP /std:c++17 /wd"4530" {arg_defines} /Zi {dll_stuff} {INCLUDES} /Fe:"{APP_NAME}" {arg_c_files} R:/rose/.build/bin/Release/raylib.lib R:/rose/.build/bin/Release/imgui.lib /link /incremental /PDB:"{PDB_NAME}" > {TMP}/clout.txt')
+	error = execute(f'{compiler} /nologo /MP /std:c++17 /wd"4530" {arg_defines} /Zi {dll_stuff} {INCLUDES} /Fe:"{APP_NAME}" {arg_c_files} {libs} /link /incremental /PDB:"{PDB_NAME}" > {TMP}/clout.txt')
 
 	if error:
 		print("~~~~~~~~~~~")
